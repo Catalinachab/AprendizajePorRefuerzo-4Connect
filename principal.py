@@ -26,7 +26,9 @@ class Connect4State:
         Returns:
             Una nueva instancia de Connect4State con los mismos valores.
         """
-        copia = Connect4State(self.current_player, self.other_player, self.board.shape[1], self.board.shape[0], self.is_terminal, self.last_move)
+        copia = Connect4State(self.current_player[0], self.other_player[0], self.board.shape[1], self.board.shape[0], self.is_terminal,self.numero_jugada)
+        copia.board=self.board.copy()
+        copia.winner=self.winner
         return copia
 
     def update_state(self, col_elegida):
@@ -63,7 +65,7 @@ class Connect4State:
         """
         jugador1 =  self.current_player == other.current_player
         jugador2 =  self.other_player == other.other_player
-        tablero = self.board == other.board
+        tablero = np.array_equal(self.board, other.board)
         termino = self.is_terminal == other.is_terminal
         ganador = self.winner == other.winner
         
@@ -78,7 +80,7 @@ class Connect4State:
         Returns:
             Hash del estado basado en el tablero y jugador actual.
         """
-        return hash(self.board, self.current_player, self.other_player, self.is_terminal, self.winner, self.numero_jugada)
+        return hash((tuple(map(tuple,self.board)), self.current_player, self.other_player, self.is_terminal, self.winner, self.numero_jugada))
         
 
     def __repr__(self):
@@ -117,7 +119,7 @@ class Connect4Environment:
         
         """
         self.current_state = Connect4State(self.player1, self.player2, self.cols, self.rows)
-        return
+        return self.current_state
 
     def available_actions(self):
         """
@@ -145,11 +147,12 @@ class Connect4Environment:
             
         """
         if action in self.available_actions():
+            moved=self.current_state_player[1]
             self.current_state.update_state(action)
             if self.current_state.is_terminal:
-                if self.current_state.winner == self.current_state.current_player[1] :
-                    reward = 1
-                elif self.current_state.winner != None:
+                if self.current_state.winner == moved :
+                    reward = 1 
+                elif self.current_state.winner != None: #gano el otro jugador
                     reward = -1
                 else:
                     reward = 0
@@ -165,6 +168,6 @@ class Connect4Environment:
 
         """
         print(self.current_state.board)
-        print(f"Turno del jugador {self.current_state.other_player[1]}")
+        print(f"Turno del jugador {self.current_state.current_player[1]}")
         print("------------------------------")
         return

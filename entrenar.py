@@ -39,6 +39,9 @@ def entrenar(episodes:int=500,
         n_actions=cols,
         device=device,
         gamma=gamma, 
+        epsilon_start=epsilon_start,
+        epsilon_min=epsilon_min, 
+        epsilon_decay=epsilon_decay,
         lr=alpha, 
         batch_size=batch_size, 
         target_update_every=target_update_every, 
@@ -58,7 +61,7 @@ def entrenar(episodes:int=500,
     
         while not done:
             valid_actions = env.available_actions()
-            if env.current_state.current_player==dqn_player or opponent==None:
+            if env.current_state.current_player[1] == dqn_player or opponent==None:
                 # Turno del DQN (o no hay oponente)
                 action = agent.select_action(state, valid_actions)
                 next_state, reward, done, _ = env.step(action)

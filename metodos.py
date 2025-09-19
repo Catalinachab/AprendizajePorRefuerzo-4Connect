@@ -8,6 +8,7 @@ import numpy as np
 from typing import Tuple
 import random
 from agentes import Agent
+from collections import namedtuple
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim): 
@@ -23,19 +24,19 @@ class DQN(nn.Module):
         h=input_dim[0]
         w = input_dim[1]
         self.features = nn.Sequential(
-        nn.Conv2d(h, w, kernel_size=3, padding=1),
+        nn.Conv2d(1, 64, kernel_size=3, padding=1),
         nn.ReLU(inplace=True),
         nn.Conv2d(64, 64, kernel_size=3, padding=1),
         nn.ReLU(inplace=True),
         nn.Conv2d(64, 128, kernel_size=3, padding=1),
         nn.ReLU(inplace=True),
         )
+        
         self.head = nn.Sequential(
         nn.Flatten(),
         nn.Linear(128 * h * w, 256),
         nn.ReLU(inplace=True),
-        nn.Linear(256, output_dim),
-        nn.Linear(256, output_dim)  #  Q-values crudos
+        nn.Linear(256, output_dim) #Q-values
         )
         
         
@@ -94,6 +95,16 @@ class DeepQLearningAgent:
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         self.loss_fn = nn.MSELoss()
         self.train_steps = 0
+        self.grad_steps = 0
+        self.Transition = namedtuple('Transition', ('s', 'a', 'r', 's_next', 'done'))
+
+    def _mask_q_next(self, q_next_online: torch.Tensor, s_next_batch: torch.Tensor) -> torch.Tensor:
+        # s_next_batch: [B, 1, H, W] → columnas libres en top row
+        top = s_next_batch[:, 0, 0, :]         # [B, W]
+        valid = (top == 0)                     # bool [B, W]
+        q_next_masked = q_next_online.masked_fill(~valid, -1e9)  # [B, A] con A==W
+        return q_next_masked
+
 
     def preprocess(self, state):
         """
@@ -105,7 +116,6 @@ class DeepQLearningAgent:
         Returns:
             Tensor de PyTorch con el estado aplanado.
         """
-        print(state.board + "este es el estado")
         board = state.board
         arr = np.array(board, dtype=np.float32)        # (rows, cols)
         tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)  # [1, 1, rows, cols]
@@ -153,9 +163,11 @@ class DeepQLearningAgent:
             done: Si el episodio terminó.
         """
          # Quitamos la dimensión de batch -> [rows, cols]
-        s_t = self.preprocess(s).squeeze(0).to(self.device)
-        s_next_t = self.preprocess(s_next).squeeze(0).to(self.device)
+        s_t = self.preprocess(s).squeeze(0).squeeze(0).to(self.device)         # [1, H, W] -> [H, W]
+        s_next_t = self.preprocess(s_next).squeeze(0).squeeze(0).to(self.device)
         self.memory.append(self.Transition(s_t, a, r, s_next_t, done))
+        if len(self.memory) > self.memory_size:
+            self.memory.pop(0)  # descartar la más antigua
 
     def train_step(self): 
         """
@@ -246,6 +258,12 @@ class TrainedAgent(Agent):
 
         self.net.eval()
 
+    def _preprocess_single(self, state, device):
+        arr = np.array(state.board, dtype=np.float32)   # (H, W)
+        tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+        return tensor.to(device)
+
+
     def play(self, state, valid_actions): 
         """
         Selecciona la mejor acción según el modelo entrenado.
@@ -258,7 +276,7 @@ class TrainedAgent(Agent):
             Índice de la mejor acción según el modelo.
         """
         with torch.no_grad():
-            s_t = self.preprocess(state)    
+            s_t = self._preprocess_single(state,self.device)    
             q = self.net(s_t)                                     # [1, n_actions]
 
             # Enmascarar acciones inválidas
