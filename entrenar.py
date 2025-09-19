@@ -1,6 +1,8 @@
 import torch
-from principal import Connect4Environment, Connect4State, DeepQLearningAgent, TrainedAgent
-from agentes import Agent
+from utils import *
+from principal import Connect4Environment, Connect4State
+from metodos import DeepQLearningAgent, TrainedAgent
+from agentes import Agent, RandomAgent
 import argparse
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,13 +30,13 @@ def entrenar(episodes:int=500,
                      f"{alpha}_{batch_size}_{memory_size}_{target_update_every}"
     if verbose: print(model_name, flush=True)
     
-    # Inicialización del ambiente
-    env:Connect4Environment = Connect4Environment()
+    rows = 6
+    cols = 7
     
     # Inicialización del agente
     agent:Agent = DeepQLearningAgent(
-        state_shape=(env.rows, env.cols),
-        n_actions=env.cols,
+        state_shape=(rows, cols),
+        n_actions=cols,
         device=device,
         gamma=gamma, 
         lr=alpha, 
@@ -42,6 +44,10 @@ def entrenar(episodes:int=500,
         target_update_every=target_update_every, 
         epsilon_decay=epsilon_decay
     )
+
+
+    # Inicialización del ambiente
+    env: Connect4Environment = Connect4Environment(agent, opponent,rows, cols)
     
     # Entrenamiento
     for episode in range(episodes):
@@ -52,11 +58,12 @@ def entrenar(episodes:int=500,
     
         while not done:
             valid_actions = env.available_actions()
-            if env.state.current_player==dqn_player or opponent==None:
+            if env.current_state.current_player==dqn_player or opponent==None:
                 # Turno del DQN (o no hay oponente)
                 action = agent.select_action(state, valid_actions)
                 next_state, reward, done, _ = env.step(action)
                 # Solo almacenar experiencias cuando DQN juega
+                
                 agent.store_transition(state, action, reward, next_state, done)
                 loss = agent.train_step() 
                 if loss is not None:
@@ -76,7 +83,7 @@ def entrenar(episodes:int=500,
 
     if verbose: print(flush=True)
     
-    torch.save(agent.q_network.state_dict(), f"{model_name}.pth")
+    torch.save(agent.policy_net.state_dict(), f"{model_name}.pth")
 
 
 if __name__ == '__main__':
@@ -106,7 +113,7 @@ if __name__ == '__main__':
             device=device
         )
     else: 
-        agente_entrenado = None
+        agente_entrenado = RandomAgent(name="RandomAgent")
 
     # Llamar a la función principal con los argumentos proporcionados
     entrenar(episodes=args.episodes, 
