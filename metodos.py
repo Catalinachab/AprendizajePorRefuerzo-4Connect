@@ -122,6 +122,7 @@ class DeepQLearningAgent:
         Returns:
             Índice de la acción seleccionada.
         """
+    
         # 1. Exploración
         if random.uniform(0, 1) < self.epsilon:
             return random.choice(valid_actions)
@@ -137,6 +138,7 @@ class DeepQLearningAgent:
 
             # Seleccionamos el índice de la mejor acción válida
             action = int(torch.argmax(mask, dim=1).item())
+            
             return action
 
     def store_transition(self, s, a, r, s_next, done):
@@ -256,7 +258,7 @@ class TrainedAgent(Agent):
             Índice de la mejor acción según el modelo.
         """
         with torch.no_grad():
-            s_t = self._preprocess_single(state, self.device)     # [1,1,H,W]
+            s_t = self.preprocess(state)    
             q = self.net(s_t)                                     # [1, n_actions]
 
             # Enmascarar acciones inválidas
