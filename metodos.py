@@ -181,45 +181,41 @@ class DeepQLearningAgent:
 
          # -------- Sample batch --------
         batch = random.sample(self.memory, self.batch_size)
-        # Cada s está guardado como [rows, cols]; lo pasamos a [B, 1, rows, cols]
-        s_batch      = torch.stack([b.s for b in batch], dim=0).unsqueeze(1).to(self.device)
-        s_next_batch = torch.stack([b.s_next for b in batch], dim=0).unsqueeze(1).to(self.device)
-        a_batch      = torch.tensor([b.a for b in batch], dtype=torch.long, device=self.device)      # [B]
-        r_batch      = torch.tensor([b.r for b in batch], dtype=torch.float32, device=self.device)   # [B]
-        done_batch   = torch.tensor([b.done for b in batch], dtype=torch.bool, device=self.device)   # [B]
+        # Cada s se guardó como [H, W] o [1, H, W]; lo pasamos a [B, 1, H, W]
+        s_batch      = torch.stack([b.s.squeeze(0) if b.s.dim()==3 else b.s for b in batch], dim=0).unsqueeze(1).to(self.device)
+        s_next_batch = torch.stack([b.s_next.squeeze(0) if b.s_next.dim()==3 else b.s_next for b in batch], dim=0).unsqueeze(1).to(self.device)
+        a_batch      = torch.tensor([b.a for b in batch], dtype=torch.long, device=self.device)
+        r_batch      = torch.tensor([b.r for b in batch], dtype=torch.float32, device=self.device)
+        done_batch   = torch.tensor([b.done for b in batch], dtype=torch.bool, device=self.device)
 
-        # -------- Q(s,a) predicho --------
-        q_all = self.policy_net(s_batch)                      # [B, n_actions]
+        # Q(s,a) con gradiente
+        q_all = self.policy_net(s_batch)                      # [B, A]
         q_sa  = q_all.gather(1, a_batch.unsqueeze(1)).squeeze(1)  # [B]
 
-        # -------- Target con Double DQN --------
+        # Target sin gradiente
         with torch.no_grad():
-            # Online net elige la mejor acción válida en s'
-            q_next_online = self.policy_net(s_next_batch)     # [B, n_actions]
+            q_next_online = self.policy_net(s_next_batch)     # [B, A]
             q_next_online_masked = self._mask_q_next(q_next_online, s_next_batch)
             next_acts = q_next_online_masked.argmax(dim=1)    # [B]
 
-            # Target net evalúa esa acción
-            q_next_target_all = self.target_net(s_next_batch) # [B, n_actions]
+            q_next_target_all = self.target_net(s_next_batch) # [B, A]
             q_next_target = q_next_target_all.gather(1, next_acts.unsqueeze(1)).squeeze(1)  # [B]
 
-            # y(s) = r + gamma * max_a' Q_target(s', a')  (si no es terminal)
             target = r_batch + (~done_batch).float() * self.gamma * q_next_target  # [B]
 
-            # -------- Loss & step --------
-            loss = self.loss_fn(q_sa, target)
-            self.optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
-            self.optimizer.step()
+        # Loss y paso de optimización (con gradiente)
+        loss = self.loss_fn(q_sa, target)
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1.0)
+        self.optimizer.step()
 
-            # -------- Target update --------
-            self.grad_steps += 1
-            if self.grad_steps % self.target_update_every == 0:
-                self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.grad_steps += 1
+        if self.grad_steps % self.target_update_every == 0:
+            self.target_net.load_state_dict(self.policy_net.state_dict())
 
-            return float(loss.item())
-            
+        return float(loss.item())
+
 
     def update_epsilon(self):
         """

@@ -29,7 +29,7 @@ class DefenderAgent(Agent):
     def __init__(self, name: str):
         self.name = name
     def play(self, state, valid_actions):
-        me:int = state.current_player
+        me:int = state.current_player[1]
         opponent:int = 3 - me
         for col in valid_actions:
             # Si el oponente ganará al jugar en col, elegimos col para bloquearlo.

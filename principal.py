@@ -147,7 +147,7 @@ class Connect4Environment:
             
         """
         if action in self.available_actions():
-            moved=self.current_state_player[1]
+            moved=self.current_state.current_player[1]
             self.current_state.update_state(action)
             if self.current_state.is_terminal:
                 if self.current_state.winner == moved :

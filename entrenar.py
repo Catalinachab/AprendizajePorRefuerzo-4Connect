@@ -6,6 +6,7 @@ from agentes import Agent, RandomAgent
 import argparse
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 def entrenar(episodes:int=500,
              gamma:float=0.99, 
@@ -34,18 +35,18 @@ def entrenar(episodes:int=500,
     cols = 7
     
     # Inicialización del agente
-    agent:Agent = DeepQLearningAgent(
-        state_shape=(rows, cols),
-        n_actions=cols,
-        device=device,
-        gamma=gamma, 
-        epsilon_start=epsilon_start,
-        epsilon_min=epsilon_min, 
-        epsilon_decay=epsilon_decay,
-        lr=alpha, 
-        batch_size=batch_size, 
-        target_update_every=target_update_every, 
-        epsilon_decay=epsilon_decay
+    agent: Agent = DeepQLearningAgent(
+    state_shape=(rows, cols),
+    n_actions=cols,
+    device=device,
+    gamma=gamma,
+    epsilon=epsilon_start,        # antes: epsilon_start
+    epsilon_min=epsilon_min,      # agrega epsilon_min
+    epsilon_decay=epsilon_decay,  # ya lo pasabas
+    lr=alpha,
+    batch_size=batch_size,
+    memory_size=memory_size,      # agrega memory_size
+    target_update_every=target_update_every
     )
 
 
