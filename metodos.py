@@ -10,52 +10,119 @@ import random
 from agentes import Agent
 from collections import namedtuple
 
-class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim): 
-        """
-        Inicializa la red neuronal DQN para el aprendizaje por refuerzo.
-        
-        Args:
-            input_dim: Dimensión de entrada (número de features del estado).
-            output_dim: Dimensión de salida (número de acciones posibles).
-        """
+
+
+# ----------------- Bloque residual simple -----------------
+class ResidualBlock(nn.Module):
+    def __init__(self, in_ch, out_ch):
         super().__init__()
-        c=2 #jugadores
-        h=input_dim[0]
-        w = input_dim[1]
-        self.features = nn.Sequential(
-        nn.Conv2d(1, 64, kernel_size=3, padding=1),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(64, 64, kernel_size=3, padding=1),
-        nn.ReLU(inplace=True),
-        nn.Conv2d(64, 128, kernel_size=3, padding=1),
-        nn.ReLU(inplace=True),
-        )
-        
-        self.head = nn.Sequential(
-        nn.Flatten(),
-        nn.Linear(128 * h * w, 256),
-        nn.ReLU(inplace=True),
-        nn.Linear(256, output_dim) #Q-values
-        )
-        
-        
+        self.rb1_conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False)
+        self.rb1_bn1   = nn.BatchNorm2d(out_ch)
+        self.rb1_conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
+        self.rb1_bn2   = nn.BatchNorm2d(out_ch)
+
+        self.need_proj = (in_ch != out_ch)
+        if self.need_proj:
+            self.rb2_proj    = nn.Conv2d(in_ch, out_ch, 1, bias=False)
+            self.rb2_proj_bn = nn.BatchNorm2d(out_ch)
 
     def forward(self, x):
-        """
-        Pasa la entrada a través de la red neuronal.
+        identity = x
+        out = F.relu(self.rb1_bn1(self.rb1_conv1(x)))
+        out = self.rb1_bn2(self.rb1_conv2(out))
+        if self.need_proj:
+            identity = self.rb2_proj_bn(self.rb2_proj(identity))
+        out = F.relu(out + identity)
+        return out
+
+# ----------------- Arquitectura residual (ResDQN) -----------------
+class ResDQN(nn.Module):
+    def __init__(self, input_shape, n_actions):
+        super().__init__()
+        h, w = input_shape  # p.ej. (6, 7)
+        in_ch = 1           # ajustá si usás 2/3 canales
+        mid = 64
+
+        self.conv1 = nn.Conv2d(in_ch, mid, 3, padding=1, bias=False)
+        self.bn1   = nn.BatchNorm2d(mid)
+
+        # dos bloques residuales (nombres compatibles con el checkpoint)
+        self.rb1_conv1 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
+        self.rb1_bn1   = nn.BatchNorm2d(mid)
+        self.rb1_conv2 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
+        self.rb1_bn2   = nn.BatchNorm2d(mid)
+
+        self.rb2_conv1 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
+        self.rb2_bn1   = nn.BatchNorm2d(mid)
+        self.rb2_conv2 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
+        self.rb2_bn2   = nn.BatchNorm2d(mid)
+
+        # proyección opcional en el ckpt (si estuviera guardada)
+        self.rb2_proj    = nn.Conv2d(mid, mid, 1, bias=False)
+        self.rb2_proj_bn = nn.BatchNorm2d(mid)
+
+        flat_dim = mid * h * w
+
+        # "cabeza por columnas" (coincidir nombres)
+        self.col_head1   = nn.Linear(flat_dim, 256, bias=True)
+        self.col_ln1   = nn.LayerNorm(256)
+        self.col_head_out= nn.Linear(256, n_actions, bias=True)
+
+        # algunos checkpoints guardan un sesgo por columna
+        self.col_bias = nn.Parameter(torch.zeros(n_actions))
+        nn.init.uniform_(self.col_head_out.weight, -1e-3, 1e-3)
+        nn.init.zeros_(self.col_head_out.bias)
+        nn.init.zeros_(self.col_bias)  # ya estaba en cero, lo explicitamos
+
+
+    def forward(self, x):
+        # x: [B, in_ch=1, H, W]
+        x = F.relu(self.bn1(self.conv1(x)))
+
+        # bloque 1
+        y = F.relu(self.rb1_bn1(self.rb1_conv1(x)))
+        y = self.rb1_bn2(self.rb1_conv2(y))
+        x = F.relu(x + y)
+
+        # bloque 2
+        y = F.relu(self.rb2_bn1(self.rb2_conv1(x)))
+        y = self.rb2_bn2(self.rb2_conv2(y))
+        # si existiera proyección diferente, usarla; aquí dimensiona igual
+        x = F.relu(x + y)
+
+        x = torch.flatten(x, 1)
+        x = self.col_head1(x)
+        # BatchNorm1d requiere B>1; en eval con B=1 podemos desactivarla
+        #if self.training and x.size(0) > 1:
+        #    x = self.col_bn1(x)
         
-        Args:
-            x: Tensor de entrada.
-            
-        Returns:
-            Tensor de salida con los valores Q para cada acción.
-        """
-        if x.dim() == 3:
-            x = x.unsqueeze(1)
-        x = self.features(x)
-        x = self.head(x)
-        return x
+        x = self.col_ln1(x)
+        x = F.relu(x)
+        q = self.col_head_out(x) + self.col_bias
+        return q
+
+# ----------------- DQN "clásico" que ya tenías -----------------
+class DQN(nn.Module):
+    def __init__(self, input_shape, n_actions):
+        super().__init__()
+        h, w = input_shape
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 64, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(128 * h * w, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, n_actions),
+        )
+
+    def forward(self, x):
+        return self.head(self.features(x))
 
 class DeepQLearningAgent:
     def __init__(self, state_shape: Tuple[int, int], n_actions: int, device: torch.device,
@@ -83,17 +150,20 @@ class DeepQLearningAgent:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
-        self.learningRate = lr
+        #self.learningRate = lr
         self.target_update_every = target_update_every
         self.memory = []  # Memoria de experiencias
         self.memory_size = memory_size
         self.step_count = 0  # Contador de pasos para actualizar la red objetivo
-        self.policy_net = DQN(state_shape, n_actions).to(device)
-        self.target_net = DQN(state_shape, n_actions).to(device)
+        self.policy_net = ResDQN(state_shape, n_actions).to(device)
+        self.target_net = ResDQN(state_shape, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()  # La red objetivo no se entrena
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-        self.loss_fn = nn.MSELoss()
+        #self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+        #self.loss_fn = nn.MSELoss()
+        self.learningRate = 5e-4  # o 1e-4 si aún ves picos
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learningRate)
+        self.loss_fn = nn.SmoothL1Loss(beta=1.0)  # Huber
         self.train_steps = 0
         self.grad_steps = 0
         self.Transition = namedtuple('Transition', ('s', 'a', 'r', 's_next', 'done'))
@@ -118,6 +188,7 @@ class DeepQLearningAgent:
         """
         board = state.board
         arr = np.array(board, dtype=np.float32)        # (rows, cols)
+        arr = np.where(arr == 2, -1.0, arr)
         tensor = torch.from_numpy(arr).unsqueeze(0).unsqueeze(0)  # [1, 1, rows, cols]
         return tensor.to(self.device)
 
@@ -138,9 +209,15 @@ class DeepQLearningAgent:
             return random.choice(valid_actions)
 
         # 2. Explotación
+        #with torch.no_grad():
+         #   s_t = self.preprocess(state)        # [rows, cols]
+            ###q_values = self.policy_net(s_t)     # [1, n_actions]: asigna proba a cada posibilidad
+
+            self.policy_net.eval()
         with torch.no_grad():
-            s_t = self.preprocess(state)        # [rows, cols]
-            q_values = self.policy_net(s_t)     # [1, n_actions]: asigna proba a cada posibilidad
+            s_t = self.preprocess(state)
+            q_values = self.policy_net(s_t)
+            self.policy_net.train()
 
             # Enmascarar acciones inválidas
             mask = torch.full_like(q_values, -1e9)  # todas muy bajas
@@ -224,36 +301,36 @@ class DeepQLearningAgent:
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
         return
 
-class TrainedAgent(Agent):
-    def __init__(self, model_path: str, state_shape: tuple, n_actions: int, device='cpu'):
-        """
-        Inicializa un agente DQN pre-entrenado.
-        
-        Args:
-            model_path: Ruta al archivo del modelo entrenado.
-            state_shape: Forma del estado del juego.
-            n_actions: Número de acciones posibles.
-            device: Dispositivo para computación.
-        """   
-        self.device = torch.device(device)
-        self.n_actions = n_actions
-        self.name = "Trained agent"
+class TrainedAgent:
+    def __init__(self, model_path, state_shape, n_actions, device, arch: str | None = None):
+        self.device = device
+        self.name = "Agente nuestro"
+        # weights_only=True: evita el warning y es más seguro si guardaste state_dict
+        ckpt = torch.load(model_path, map_location=self.device, weights_only=True)
 
-        # DQN debe coincidir con la arquitectura usada en training.
-        # Si tu DQN espera (rows, cols), desempaquetamos:
-        rows, cols = state_shape
-        self.net = DQN((rows, cols), n_actions).to(self.device)
-
-        # Carga flexible del checkpoint
-        ckpt = torch.load(model_path, map_location=self.device)
-        if isinstance(ckpt, dict) and "policy" in ckpt:
-            # Guardaste un dict con varias cosas (policy/target/opt/epsilon/etc.)
-            self.net.load_state_dict(ckpt["policy"])
+        # soporta tanto {"state_dict": ...} como state_dict plano
+        if isinstance(ckpt, dict) and "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+            ckpt_arch = ckpt.get("arch")
         else:
-            # Guardaste sólo el state_dict de la policy
-            self.net.load_state_dict(ckpt)
+            state_dict = ckpt
+            ckpt_arch = None
 
+        # prioridad: flag explícita -> arch en ckpt -> autodetección por claves
+        arch_name = arch or ckpt_arch
+        if arch_name is None:
+            ks = list(state_dict.keys())
+            looks_resnet = any(k.startswith(("rb1_", "rb2_")) for k in ks) or any("col_head" in k for k in ks)
+            arch_name = "resdqn" if looks_resnet else "dqn"
+
+        if arch_name.lower() in ("res", "resdqn", "resnet"):
+            self.net = ResDQN(state_shape, n_actions).to(self.device)
+        else:
+            self.net = DQN(state_shape, n_actions).to(self.device)
+
+        self.net.load_state_dict(state_dict)
         self.net.eval()
+
 
     def _preprocess_single(self, state, device):
         arr = np.array(state.board, dtype=np.float32)   # (H, W)
