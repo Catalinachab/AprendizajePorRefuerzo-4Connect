@@ -237,6 +237,7 @@ class TrainedAgent(Agent):
         """   
         self.device = torch.device(device)
         self.n_actions = n_actions
+        self.name = "Trained agent"
 
         # DQN debe coincidir con la arquitectura usada en training.
         # Si tu DQN espera (rows, cols), desempaquetamos:

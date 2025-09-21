@@ -44,11 +44,11 @@ def main():
     a1 = create_agent(args.agent1, "Agente 1", args.rows, args.cols, device, args.model1)
     a2 = create_agent(args.agent2, "Agente 2", args.rows, args.cols, device, args.model2)
 
-    print(f"Juego: Trained agent (Jugador 1) vs. {a2.name} (Jugador 2) | Device: {device}")
+    print(f"Juego: {a1.name} (Jugador 1) vs. {a2.name} (Jugador 2) | Device: {device}")
     juego = Connect4(rows=args.rows, cols=args.cols, agent1=a1, agent2=a2)
     ganador = juego.play(render=args.verbose)
 
-    if ganador is None:
+    if ganador == 0:
         print("Resultado: Empate (0)")
     elif ganador == 1:
         print(f"Resultado: Gana Jugador 1 - {a1.name}")
