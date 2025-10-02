@@ -58,7 +58,7 @@ def resolve_device(device_arg: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Evaluar un agente entrenado en Conecta 4.")
     parser.add_argument("--model", required=True, help="Ruta .pth del agente entrenado (jugador A)")
-    parser.add_argument("--opponent", default="random", choices=["random", "defender", "trained"],
+    parser.add_argument("--opponent", default="defender", choices=["random", "defender", "trained"],
                         help="Tipo de oponente (default: random)")
     parser.add_argument("--opponent_model", help="Ruta .pth si el oponente es 'trained'")
     parser.add_argument("--games", type=int, default=100, help="Cantidad de partidas (default: 100)")

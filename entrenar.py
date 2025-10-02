@@ -2,7 +2,7 @@ import torch
 from utils import *
 from principal import Connect4Environment, Connect4State
 from metodos import DeepQLearningAgent, TrainedAgent
-from agentes import Agent, RandomAgent
+from agentes import Agent, RandomAgent, DefenderAgent
 import argparse
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,23 +34,21 @@ def entrenar(episodes:int=500,
     rows = 6
     cols = 7
     
-    # Inicialización del agente
     agent: Agent = DeepQLearningAgent(
     state_shape=(rows, cols),
     n_actions=cols,
     device=device,
     gamma=gamma,
-    epsilon=epsilon_start,        # antes: epsilon_start
-    epsilon_min=epsilon_min,      # agrega epsilon_min
-    epsilon_decay=epsilon_decay,  # ya lo pasabas
+    epsilon=epsilon_start,
+    epsilon_min=epsilon_min,
+    epsilon_decay=epsilon_decay,
     lr=alpha,
     batch_size=batch_size,
-    memory_size=memory_size,      # agrega memory_size
+    memory_size=memory_size,
     target_update_every=target_update_every
     )
 
 
-    # Inicialización del ambiente
     env: Connect4Environment = Connect4Environment(agent, opponent,rows, cols)
     
     # Entrenamiento
@@ -58,7 +56,7 @@ def entrenar(episodes:int=500,
         state:Connect4State = env.reset()
         done:bool = False
         episode_losses = []  
-        dqn_player = 1  # DQN siempre es jugador 1
+        dqn_player = 1  # DQN siempre es jugador 1 (cambiar para entrenar a un jugador 2)
     
         while not done:
             valid_actions = env.available_actions()
@@ -66,7 +64,6 @@ def entrenar(episodes:int=500,
                 # Turno del DQN (o no hay oponente)
                 action = agent.select_action(state, valid_actions)
                 next_state, reward, done, _ = env.step(action)
-                # Solo almacenar experiencias cuando DQN juega
                 
                 agent.store_transition(state, action, reward, next_state, done)
                 loss = agent.train_step() 
@@ -117,9 +114,9 @@ if __name__ == '__main__':
             device=device
         )
     else: 
-        agente_entrenado = RandomAgent(name="RandomAgent")
+        agente_entrenado = DefenderAgent(name="RandomAgent")
 
-    # Llamar a la función principal con los argumentos proporcionados
+
     entrenar(episodes=args.episodes, 
              gamma=args.gamma, 
              epsilon_start=args.epsilon_start, 

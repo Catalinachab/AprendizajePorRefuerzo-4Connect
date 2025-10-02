@@ -9,44 +9,22 @@ from typing import Tuple
 import random
 from agentes import Agent
 from collections import namedtuple
+## "DQN"   "ResDQN" probamos ambas y la residual va mejor
+# cambiar la variable NET aquí para elegir la arquitectura 
+NET = "ResDQN"
 
-
-
-# ----------------- Bloque residual simple -----------------
-class ResidualBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super().__init__()
-        self.rb1_conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False)
-        self.rb1_bn1   = nn.BatchNorm2d(out_ch)
-        self.rb1_conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False)
-        self.rb1_bn2   = nn.BatchNorm2d(out_ch)
-
-        self.need_proj = (in_ch != out_ch)
-        if self.need_proj:
-            self.rb2_proj    = nn.Conv2d(in_ch, out_ch, 1, bias=False)
-            self.rb2_proj_bn = nn.BatchNorm2d(out_ch)
-
-    def forward(self, x):
-        identity = x
-        out = F.relu(self.rb1_bn1(self.rb1_conv1(x)))
-        out = self.rb1_bn2(self.rb1_conv2(out))
-        if self.need_proj:
-            identity = self.rb2_proj_bn(self.rb2_proj(identity))
-        out = F.relu(out + identity)
-        return out
 
 # ----------------- Arquitectura residual (ResDQN) -----------------
 class ResDQN(nn.Module):
     def __init__(self, input_shape, n_actions):
         super().__init__()
-        h, w = input_shape  # p.ej. (6, 7)
-        in_ch = 1           # ajustá si usás 2/3 canales
+        h, w = input_shape  #(6, 7)
+        in_ch = 1
         mid = 64
 
         self.conv1 = nn.Conv2d(in_ch, mid, 3, padding=1, bias=False)
         self.bn1   = nn.BatchNorm2d(mid)
 
-        # dos bloques residuales (nombres compatibles con el checkpoint)
         self.rb1_conv1 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
         self.rb1_bn1   = nn.BatchNorm2d(mid)
         self.rb1_conv2 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
@@ -57,22 +35,19 @@ class ResDQN(nn.Module):
         self.rb2_conv2 = nn.Conv2d(mid, mid, 3, padding=1, bias=False)
         self.rb2_bn2   = nn.BatchNorm2d(mid)
 
-        # proyección opcional en el ckpt (si estuviera guardada)
         self.rb2_proj    = nn.Conv2d(mid, mid, 1, bias=False)
         self.rb2_proj_bn = nn.BatchNorm2d(mid)
 
         flat_dim = mid * h * w
 
-        # "cabeza por columnas" (coincidir nombres)
         self.col_head1   = nn.Linear(flat_dim, 256, bias=True)
         self.col_ln1   = nn.LayerNorm(256)
         self.col_head_out= nn.Linear(256, n_actions, bias=True)
 
-        # algunos checkpoints guardan un sesgo por columna
         self.col_bias = nn.Parameter(torch.zeros(n_actions))
         nn.init.uniform_(self.col_head_out.weight, -1e-3, 1e-3)
         nn.init.zeros_(self.col_head_out.bias)
-        nn.init.zeros_(self.col_bias)  # ya estaba en cero, lo explicitamos
+        nn.init.zeros_(self.col_bias)
 
 
     def forward(self, x):
@@ -155,8 +130,14 @@ class DeepQLearningAgent:
         self.memory = []  # Memoria de experiencias
         self.memory_size = memory_size
         self.step_count = 0  # Contador de pasos para actualizar la red objetivo
-        self.policy_net = ResDQN(state_shape, n_actions).to(device)
-        self.target_net = ResDQN(state_shape, n_actions).to(device)
+        
+        if NET == "DQN":
+            self.policy_net = DQN(state_shape, n_actions).to(device)
+            self.target_net = DQN(state_shape, n_actions).to(device)
+        elif NET == "ResDQN":
+            self.policy_net = ResDQN(state_shape, n_actions).to(device)
+            self.target_net = ResDQN(state_shape, n_actions).to(device)
+
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()  # La red objetivo no se entrena
         #self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
