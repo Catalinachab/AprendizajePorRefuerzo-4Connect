@@ -5,10 +5,10 @@ class Connect4:
     def __init__(self, rows:int=6, cols:int=7, agent1:Agent=None, agent2:Agent=None):
         self.rows:int = rows
         self.cols:int = cols
-        
+        self.env:Connect4Environment = Connect4Environment(rows, cols)
         self.agent1:Agent = agent1 if agent1 is not None else RandomAgent("Agente 1")
         self.agent2:Agent = agent2 if agent2 is not None else RandomAgent("Agente 2")
-        self.env:Connect4Environment = Connect4Environment(self.agent1,self.agent2, rows, cols)
+
     def play(self, render:bool=True) -> int:
         ''' Juega un juego completo de Connect4 con dos agentes. 
             Devuelve quién ganó (0==empate, 1 o 2). '''
@@ -20,7 +20,7 @@ class Connect4:
 
             valid_actions:list[int] = self.env.available_actions()
 
-            if self.env.current_state.current_player[1] == 1:
+            if self.env.state.current_player == 1:
                 action = self.agent1.play(state, valid_actions)
             else:
                 action = self.agent2.play(state, valid_actions)
@@ -30,7 +30,5 @@ class Connect4:
 
         if render: self.env.render()
 
-        winner:int = info
-        if info==None:
-            winner=0
+        winner:int = info["winner"]
         return winner

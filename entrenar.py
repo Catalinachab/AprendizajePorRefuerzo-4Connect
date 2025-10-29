@@ -49,7 +49,7 @@ def entrenar(episodes:int=500,
     )
 
 
-    env: Connect4Environment = Connect4Environment(agent, opponent,rows, cols)
+    env: Connect4Environment = Connect4Environment(rows, cols)
     
     # Entrenamiento
     for episode in range(episodes):
@@ -60,7 +60,7 @@ def entrenar(episodes:int=500,
     
         while not done:
             valid_actions = env.available_actions()
-            if env.current_state.current_player[1] == dqn_player or opponent==None:
+            if env.state.current_player == dqn_player or opponent==None:
                 # Turno del DQN (o no hay oponente)
                 action = agent.select_action(state, valid_actions)
                 next_state, reward, done, _ = env.step(action)
@@ -101,6 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('-ms', '--memory_size', type=int, default=1000, help='Tamaño de la memoria de experiencias del agente (default: 1000)')
     parser.add_argument('-ue', '--target_update_every', type=int, default=100, help='Cada cuánto actualizar red objetivo (default: 100)')
     parser.add_argument('-of', '--opponent_model_path', type=str, help='Archivo pth del agente DQN para usar como oponente.')
+    parser.add_argument('-ot', '--opponent_type', type=str, default='defender', choices=['random', 'defender'], help='Tipo de oponente: random o defender (default: defender)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Activar modo verbose para ver más detalles durante el entrenamiento')
 
     # Parsear los argumentos
@@ -113,8 +114,10 @@ if __name__ == '__main__':
             n_actions=7,
             device=device
         )
+    elif args.opponent_type == 'random':
+        agente_entrenado = RandomAgent(name="RandomAgent")
     else: 
-        agente_entrenado = DefenderAgent(name="RandomAgent")
+        agente_entrenado = DefenderAgent(name="DefenderAgent")
 
 
     entrenar(episodes=args.episodes, 

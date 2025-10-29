@@ -41,71 +41,204 @@ git clone https://github.com/Catalinachab/AprendizajePorRefuerzo-4Connect.git
 cd AprendizajePorRefuerzo-4Connect
 ```
 
-2. **Instalar dependencias**:
+2. **Crear y activar entorno virtual** (recomendado):
+```bash
+python -m venv env
+env\Scripts\activate  # Windows
+# o
+source env/bin/activate  # Linux/Mac
+```
+
+3. **Instalar dependencias**:
 ```bash
 pip install torch numpy
 ```
 
-## 🎮 Uso
-
-### Jugar una Partida
-
-Para jugar una partida entre dos agentes:
-
+4. **Verificar instalación**:
 ```bash
-python main.py --agent1 human --agent2 defender
+python -c "import torch; import numpy; print('✓ Todo instalado correctamente')"
+```
+
+## 🎮 Guía de Uso Completa
+
+### 1️⃣ Jugar una Partida Simple
+
+#### Ejemplo básico - Random vs Random:
+```bash
+python main.py --agent1 random --agent2 random
+```
+
+#### Humano vs Agente Defensor:
+```bash
+python main.py --agent1 human --agent2 defender -v
+```
+
+#### Random vs Defensor (sin mostrar tablero):
+```bash
+python main.py --agent1 random --agent2 defender
 ```
 
 **Opciones disponibles**:
 - `--rows, -r`: Número de filas del tablero (default: 6)
 - `--cols, -c`: Número de columnas del tablero (default: 7)
-- `--agent1, -a1`: Tipo de agente 1 (random, defender, human, trained)
-- `--agent2, -a2`: Tipo de agente 2 (random, defender, human, trained)
-- `--model1`: Ruta del modelo para agente entrenado 1
-- `--model2`: Ruta del modelo para agente entrenado 2
-- `--device`: Dispositivo de cómputo (cpu, cuda)
+- `--agent1, -a1`: Tipo de agente 1 (`random`, `defender`, `human`, `trained`)
+- `--agent2, -a2`: Tipo de agente 2 (`random`, `defender`, `human`, `trained`)
+- `--model1`: Ruta del modelo `.pth` para agente 1 (si es `trained`)
+- `--model2`: Ruta del modelo `.pth` para agente 2 (si es `trained`)
+- `--device`: Dispositivo (`cpu`, `cuda`, `auto`)
+- `--verbose, -v`: Mostrar tablero en cada turno
 
-### Entrenar un Agente DQN
+---
 
-Para entrenar un nuevo agente:
+### 2️⃣ Entrenar un Agente DQN
 
+#### Entrenamiento básico (200 episodios vs Random):
 ```bash
-python entrenar.py --episodes 1000 --opponent random
+python entrenar.py -n 200 -ot random -v
+```
+
+#### Entrenamiento largo (1000 episodios vs Random):
+```bash
+python entrenar.py -n 1000 -ot random -v
+```
+
+#### Entrenamiento vs Defensor (más desafiante):
+```bash
+python entrenar.py -n 2000 -ot defender -v
+```
+
+#### Entrenamiento avanzado con parámetros personalizados:
+```bash
+python entrenar.py -n 5000 -ot random -g 0.99 -es 1.0 -em 0.1 -ed 0.995 -a 0.001 -bs 128 -ms 1000 -ue 100 -v
 ```
 
 **Parámetros de entrenamiento**:
-- `--episodes`: Número de episodios de entrenamiento
-- `--gamma`: Factor de descuento (default: 0.99)
-- `--epsilon_start`: Epsilon inicial para exploración (default: 1.0)
-- `--epsilon_min`: Epsilon mínimo (default: 0.1)
-- `--epsilon_decay`: Tasa de decaimiento de epsilon (default: 0.995)
-- `--alpha`: Tasa de aprendizaje (default: 0.001)
-- `--batch_size`: Tamaño del batch (default: 64)
-- `--opponent`: Tipo de oponente (random, defender, None para self-play)
+- `-n, --episodes`: Número de episodios (default: 1000)
+- `-ot, --opponent_type`: Tipo de oponente (`random`, `defender`) (default: defender)
+- `-g, --gamma`: Factor de descuento (default: 0.99)
+- `-es, --epsilon_start`: Epsilon inicial para exploración (default: 1.0)
+- `-em, --epsilon_min`: Epsilon mínimo (default: 0.1)
+- `-ed, --epsilon_decay`: Tasa de decaimiento de epsilon (default: 0.995)
+- `-a, --alpha`: Tasa de aprendizaje (default: 0.001)
+- `-bs, --batch_size`: Tamaño del batch (default: 128)
+- `-ms, --memory_size`: Tamaño de la memoria de replay (default: 1000)
+- `-ue, --target_update_every`: Frecuencia de actualización de red objetivo (default: 100)
+- `-of, --opponent_model_path`: Ruta `.pth` para entrenar contra otro modelo entrenado
+- `-v, --verbose`: Mostrar progreso cada 100 episodios
 
-### Evaluar Agentes
+**Resultado del entrenamiento**:
+- Se genera un archivo `.pth` con el modelo entrenado
+- Nombre formato: `trained_model_vs_[oponente]_[params].pth`
+- Ejemplo: `trained_model_vs_RandomAgent_1000_0.99_1.0_0.1_0.9950.001_128_1000_100.pth`
 
-Para evaluar el rendimiento de un agente entrenado:
+---
 
+### 3️⃣ Evaluar un Agente Entrenado
+
+#### Evaluar vs Random (100 partidas):
 ```bash
-python eval.py --model path/to/model.pth --opponent random --games 100
+python eval.py --model trained_model_vs_RandomAgent_200_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --opponent random --games 100
 ```
 
-### Ejemplos de Uso
-
-1. **Humano vs Agente Defensor**:
+#### Evaluar vs Defensor (50 partidas):
 ```bash
-python main.py --agent1 human --agent2 defender
+python eval.py --model trained_model_vs_RandomAgent_200_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --opponent defender --games 50
 ```
 
-2. **Entrenar contra agente aleatorio**:
+#### Evaluar vs otro modelo entrenado:
 ```bash
-python entrenar.py --episodes 2000 --opponent random --alpha 0.001
+python eval.py --model modelo1.pth --opponent trained --opponent_model modelo2.pth --games 100
 ```
 
-3. **Agente entrenado vs Agente defensor**:
+**Parámetros de evaluación**:
+- `--model`: Ruta del modelo `.pth` a evaluar (obligatorio)
+- `--opponent`: Tipo de oponente (`random`, `defender`, `trained`)
+- `--opponent_model`: Ruta del modelo oponente (si opponent=`trained`)
+- `--games`: Número de partidas a jugar (default: 100)
+- `--rows`: Filas del tablero (default: 6)
+- `--cols`: Columnas del tablero (default: 7)
+- `--device`: Dispositivo (`cpu`, `cuda`, `auto`)
+- `-v, --verbose`: Mostrar cada partida (lento)
+
+**Resultado de la evaluación**:
+```
+Evaluando: Agente nuestro vs. Random | Juegos: 100 | Device: cpu
+Resultados -> A gana: 70 (70.0%) | B gana: 30 (30.0%) | Empates: 0 (0.0%)
+```
+
+---
+
+### 4️⃣ Jugar contra un Agente Entrenado
+
+#### Tú (humano) vs Agente entrenado:
 ```bash
-python main.py --agent1 trained --model1 trained_model_vs_RandomAgent_2000_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --agent2 defender
+python main.py --agent1 human --agent2 trained --model2 trained_model_vs_RandomAgent_200_0.99_1.0_0.1_0.9950.001_128_1000_100.pth -v
+```
+
+#### Agente entrenado vs Defensor:
+```bash
+python main.py --agent1 trained --model1 trained_model_vs_RandomAgent_200_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --agent2 defender -v
+```
+
+---
+
+## 📋 Flujo de Trabajo Recomendado
+
+### Para entrenar y evaluar un nuevo agente:
+
+1. **Entrenar el agente** (ajusta el número de episodios según tu tiempo):
+```bash
+python entrenar.py -n 500 -ot random -v
+```
+
+2. **Copiar el nombre del modelo generado** (aparece en la salida):
+```
+trained_model_vs_RandomAgent_500_0.99_1.0_0.1_0.9950.001_128_1000_100.pth
+```
+
+3. **Evaluar el rendimiento vs Random**:
+```bash
+python eval.py --model trained_model_vs_RandomAgent_500_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --opponent random --games 100
+```
+
+4. **Evaluar el rendimiento vs Defensor**:
+```bash
+python eval.py --model trained_model_vs_RandomAgent_500_0.99_1.0_0.1_0.9950.001_128_1000_100.pth --opponent defender --games 100
+```
+
+5. **Jugar tú mismo contra el agente**:
+```bash
+python main.py --agent1 human --agent2 trained --model2 trained_model_vs_RandomAgent_500_0.99_1.0_0.1_0.9950.001_128_1000_100.pth -v
+```
+
+---
+
+## 🎯 Ejemplos de Comandos Rápidos
+
+### Comandos Copy-Paste Listos
+
+```bash
+# 1. Entrenar agente rápido (200 episodios, ~2-3 minutos)
+python entrenar.py -n 200 -ot random -v
+
+# 2. Entrenar agente medio (1000 episodios, ~10-15 minutos)
+python entrenar.py -n 1000 -ot random -v
+
+# 3. Entrenar agente fuerte (5000 episodios, ~45-60 minutos)
+python entrenar.py -n 5000 -ot defender -v
+
+# 4. Evaluar cualquier modelo (reemplaza NOMBRE_MODELO.pth)
+python eval.py --model NOMBRE_MODELO.pth --opponent random --games 100
+
+# 5. Jugar contra el modelo (reemplaza NOMBRE_MODELO.pth)
+python main.py --agent1 human --agent2 trained --model2 NOMBRE_MODELO.pth -v
+
+# 6. Ver partida: Random vs Defensor
+python main.py --agent1 random --agent2 defender -v
+
+# 7. Listar todos los modelos entrenados
+dir *.pth  # Windows
+ls *.pth   # Linux/Mac
 ```
 
 ## 🧠 Algoritmo de Aprendizaje

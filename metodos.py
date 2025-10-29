@@ -62,21 +62,18 @@ class ResDQN(nn.Module):
         # bloque 2
         y = F.relu(self.rb2_bn1(self.rb2_conv1(x)))
         y = self.rb2_bn2(self.rb2_conv2(y))
-        # si existiera proyección diferente, usarla; aquí dimensiona igual
+        
         x = F.relu(x + y)
 
         x = torch.flatten(x, 1)
         x = self.col_head1(x)
-        # BatchNorm1d requiere B>1; en eval con B=1 podemos desactivarla
-        #if self.training and x.size(0) > 1:
-        #    x = self.col_bn1(x)
         
         x = self.col_ln1(x)
         x = F.relu(x)
         q = self.col_head_out(x) + self.col_bias
         return q
 
-# ----------------- DQN "clásico" que ya tenías -----------------
+# ----------------- DQN "clásico"  -----------------
 class DQN(nn.Module):
     def __init__(self, input_shape, n_actions):
         super().__init__()
@@ -125,11 +122,12 @@ class DeepQLearningAgent:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
-        #self.learningRate = lr
+        self.learningRate = lr
+        self.learningRate = 5e-4  # lo que mejor dio
         self.target_update_every = target_update_every
-        self.memory = []  # Memoria de experiencias
+        self.memory = []  # memoria de experiencias
         self.memory_size = memory_size
-        self.step_count = 0  # Contador de pasos para actualizar la red objetivo
+        self.step_count = 0 
         
         if NET == "DQN":
             self.policy_net = DQN(state_shape, n_actions).to(device)
@@ -142,18 +140,17 @@ class DeepQLearningAgent:
         self.target_net.eval()  # La red objetivo no se entrena
         #self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
         #self.loss_fn = nn.MSELoss()
-        self.learningRate = 5e-4  # o 1e-4 si aún ves picos
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learningRate)
-        self.loss_fn = nn.SmoothL1Loss(beta=1.0)  # Huber
+        self.loss_fn = nn.SmoothL1Loss(beta=1.0)  # Huber (funciono mejor)
         self.train_steps = 0
         self.grad_steps = 0
         self.Transition = namedtuple('Transition', ('s', 'a', 'r', 's_next', 'done'))
 
     def _mask_q_next(self, q_next_online: torch.Tensor, s_next_batch: torch.Tensor) -> torch.Tensor:
-        # s_next_batch: [B, 1, H, W] → columnas libres en top row
-        top = s_next_batch[:, 0, 0, :]         # [B, W]
-        valid = (top == 0)                     # bool [B, W]
-        q_next_masked = q_next_online.masked_fill(~valid, -1e9)  # [B, A] con A==W
+        
+        top = s_next_batch[:, 0, 0, :]
+        valid = (top == 0)                     
+        q_next_masked = q_next_online.masked_fill(~valid, -1e9) 
         return q_next_masked
 
 
@@ -190,11 +187,6 @@ class DeepQLearningAgent:
             return random.choice(valid_actions)
 
         # 2. Explotación
-        #with torch.no_grad():
-         #   s_t = self.preprocess(state)        # [rows, cols]
-            ###q_values = self.policy_net(s_t)     # [1, n_actions]: asigna proba a cada posibilidad
-
-            self.policy_net.eval()
         with torch.no_grad():
             s_t = self.preprocess(state)
             q_values = self.policy_net(s_t)
@@ -332,10 +324,10 @@ class TrainedAgent:
         """
         with torch.no_grad():
             s_t = self._preprocess_single(state,self.device)    
-            q = self.net(s_t)                                     # [1, n_actions]
+            q = self.net(s_t)                                     
 
             # Enmascarar acciones inválidas
-            mask = torch.full_like(q, -1e9)                       # [1, n_actions]
+            mask = torch.full_like(q, -1e9)                       
             mask[:, valid_actions] = q[:, valid_actions]
 
             action = int(torch.argmax(mask, dim=1).item())
